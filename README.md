@@ -253,6 +253,22 @@ curl -X POST https://YOUR-HOST/api/v1/payments -H "Authorization: Bearer ml_..."
   -d '{"transaction_id":"txn_1","amount":29.99,"currency":"USD","visitor_id":"<ml_vid cookie>","email":"jane@acme.com"}'
 ```
 
+## AI access (MCP)
+
+Minilytics has an [MCP](https://modelcontextprotocol.io) server at `/api/mcp`, so Claude, Cursor or any MCP client can
+read your stats and manage funnels. Create a token in **site settings → AI access (MCP)**. The token can see every site
+its creator can see. It is shown once and stored only as a hash. You can revoke it at any time.
+
+```bash
+claude mcp add --transport http minilytics https://YOUR-HOST/api/mcp --header "Authorization: Bearer mlmcp_..."
+```
+
+Tools: `list_sites`, `get_overview`, `get_breakdown` (sources, pages, countries, goals, campaigns...), `list_visitors`,
+`get_visitor` (by `ml_vid` cookie id), `list_customers`, `get_realtime`, `list_funnels`, `get_funnel_stats` (saved or
+ad-hoc steps), `create_funnel` and `delete_funnel`. Reports take the same periods and filters as the dashboard.
+
+Try asking: *"Which sources brought paying customers this month?"* or *"Create a funnel from the blog to checkout and tell me where people drop off."*
+
 ## Accuracy notes
 
 No analytics tool is 100% accurate. These are the main gaps and how this project handles them:

@@ -3,7 +3,7 @@ import { navigate } from '../App';
 import { Favicon } from '../components/Icons';
 import { buildAiPrompt } from '../lib/aiPrompt';
 import { api, type Site } from '../lib/api';
-import { fmtMoney } from '../lib/format';
+import { fmtAgo, fmtMoney } from '../lib/format';
 
 const DOCS = 'https://github.com/surendrapandar/minilytics#';
 
@@ -148,6 +148,8 @@ export function Settings({ siteId }: { siteId: string }) {
       </div>
 
       <AiSetup site={site} origin={origin} />
+
+      <McpAccess origin={origin} />
 
       <Section title="1. Install the script" desc={<>Add it to the <code>&lt;head&gt;</code> of every page on {site.domain}.</>} docs="install-on-a-website">
         <Code label="HTML">{`<script defer data-website-id="${site.id}" src="${origin}/js/script.js"></script>`}</Code>
@@ -484,6 +486,102 @@ function AiSetup({ site, origin }: { site: Site; origin: string }) {
       </button>
       {open && <pre className="code mt-3 max-h-96 whitespace-pre-wrap">{prompt}</pre>}
     </section>
+  );
+}
+
+interface McpToken {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: number;
+  last_used_at: number | null;
+  token?: string;
+}
+
+/** Tokens for the MCP server, so Claude & co. can query stats and create funnels. Account-wide, not per site. */
+function McpAccess({ origin }: { origin: string }) {
+  const [tokens, setTokens] = useState<McpToken[] | null>(null);
+  const [name, setName] = useState('');
+  const [created, setCreated] = useState<McpToken | null>(null);
+  const url = `${origin}/api/mcp`;
+
+  useEffect(() => {
+    api<McpToken[]>('/api/mcp-tokens').then(setTokens);
+  }, []);
+
+  async function create() {
+    const t = await api<McpToken>('/api/mcp-tokens', { method: 'POST', json: { name } });
+    setCreated(t);
+    setName('');
+    setTokens((ts) => [t, ...(ts ?? [])]);
+  }
+
+  async function revoke(t: McpToken) {
+    if (!confirm(`Revoke "${t.name}"? Assistants using it lose access right away.`)) return;
+    await api(`/api/mcp-tokens/${t.id}`, { method: 'DELETE' });
+    setTokens((ts) => (ts ?? []).filter((x) => x.id !== t.id));
+    if (created?.id === t.id) setCreated(null);
+  }
+
+  const token = created?.token ?? 'mlmcp_...';
+  return (
+    <Section
+      title="AI access (MCP)"
+      desc="Let Claude, Cursor or any MCP client read your stats, look up visitors and create funnels. A token works for all of your sites."
+    >
+      <div className="space-y-4 text-sm">
+        <CopyField value={url} />
+        <div className="flex gap-2">
+          <input className="input" placeholder="Token name, e.g. Claude on my laptop" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+          <button className="btn-dark shrink-0" onClick={create}>
+            Create token
+          </button>
+        </div>
+
+        {created?.token && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="font-medium text-amber-900">Copy this token now. It won't be shown again.</p>
+            <CopyField value={created.token} />
+            <Code label="Claude Code">{`claude mcp add --transport http minilytics ${url} --header "Authorization: Bearer ${token}"`}</Code>
+            <Code label="Cursor, VS Code & other clients (mcp.json)">{`{
+  "mcpServers": {
+    "minilytics": {
+      "url": "${url}",
+      "headers": { "Authorization": "Bearer ${token}" }
+    }
+  }
+}`}</Code>
+            <Code label="Claude Desktop (claude_desktop_config.json)">{`{
+  "mcpServers": {
+    "minilytics": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "${url}", "--header", "Authorization:\${AUTH}"],
+      "env": { "AUTH": "Bearer ${token}" }
+    }
+  }
+}`}</Code>
+          </div>
+        )}
+
+        {tokens && tokens.length > 0 && (
+          <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200">
+            {tokens.map((t) => (
+              <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{t.name}</div>
+                  <div className="text-xs text-stone-500">
+                    <code>{t.prefix}…</code> · {t.last_used_at ? `used ${fmtAgo(Date.now() - t.last_used_at)} ago` : 'never used'}
+                  </div>
+                </div>
+                <button className={`${SMALL_BUTTON} border border-red-200 text-red-600 hover:bg-red-50`} onClick={() => revoke(t)}>
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Section>
   );
 }
 

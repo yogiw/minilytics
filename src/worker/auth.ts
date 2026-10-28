@@ -88,13 +88,19 @@ export async function currentUser(c: Context<AppEnv>): Promise<User | null> {
   if (!value) return null;
   const parts = value.split('.');
   if (Number(parts[parts.length - 1]) <= Date.now()) return null;
-  // Self-hosted password session: "admin.<expires>"
-  if (parts[0] === 'admin') return isHosted(c.env) ? null : SELF_HOSTED_OWNER;
-  // Hosted Google session: "u:<userId>.<expires>"
-  if (!parts[0].startsWith('u:') || !isHosted(c.env)) return null;
-  const row = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(parts[0].slice(2)).first<UserRow>();
+  return userForSubject(c.env, parts[0]);
+}
+
+/**
+ * The account behind a session subject: "admin" (self-hosted password) or "u:<userId>" (hosted Google).
+ * MCP tokens store the same subject, so they see exactly what their creator sees.
+ */
+export async function userForSubject(env: Env, subject: string): Promise<User | null> {
+  if (subject === 'admin') return isHosted(env) ? null : SELF_HOSTED_OWNER;
+  if (!subject.startsWith('u:') || !isHosted(env)) return null;
+  const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(subject.slice(2)).first<UserRow>();
   if (!row) return null;
-  const admin = isAdminEmail(c.env, row.email);
+  const admin = isAdminEmail(env, row.email);
   return {
     id: row.id,
     email: row.email,
@@ -106,6 +112,9 @@ export async function currentUser(c: Context<AppEnv>): Promise<User | null> {
     plan_until: row.plan_until,
   };
 }
+
+/** The subject to store for this user (see userForSubject). */
+export const subjectOf = (user: User) => (user.id === 'admin' ? 'admin' : `u:${user.id}`);
 
 export const requireUser = async (c: Context<AppEnv>, next: Next) => {
   const user = await currentUser(c);
