@@ -4,6 +4,7 @@ import { displayName } from '../../shared/names';
 import { useDash } from '../lib/context';
 import { countryName, fmtAgo, fmtDateTime, fmtDuration, fmtNumber, fmtPct } from '../lib/format';
 import { useApi } from '../lib/useApi';
+import { CookieId } from './CookieId';
 import { Avatar, BrowserIcon, DeviceIcon, Flag, OSIcon, SourceIcon } from './Icons';
 
 type Tab = 'goal' | 'funnel' | 'user' | 'journey';
@@ -208,7 +209,7 @@ function FunnelForm({ onDone, canCancel }: { onDone: (id?: string) => void; canC
   );
 }
 
-function VisitorCell({ id, name, email, country, city, device, os, browser, badge }: Record<string, any>) {
+function VisitorCell({ id, name, email, country, city, device, os, browser, badge, showId }: Record<string, any>) {
   return (
     <div className="flex items-center gap-3">
       <Avatar id={id} size={44} />
@@ -232,6 +233,7 @@ function VisitorCell({ id, name, email, country, city, device, os, browser, badg
             <BrowserIcon name={browser} size={15} /> {browser}
           </span>
         </div>
+        {showId && id && <CookieId id={id} className="mt-1" />}
       </div>
     </div>
   );
@@ -417,6 +419,7 @@ function Users({ search }: { search: string }) {
                     device={r.device}
                     os={r.os}
                     browser={r.browser}
+                    showId
                     badge={r.spent > 0 ? <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">Customer</span> : null}
                   />
                 </td>

@@ -2,6 +2,7 @@ import { displayName } from '../../shared/names';
 import { useDash } from '../lib/context';
 import { countryName, fmtAgo, fmtDateTime, fmtDuration } from '../lib/format';
 import { useApi } from '../lib/useApi';
+import { CookieId } from './CookieId';
 import { Avatar, BrowserIcon, DeviceIcon, Flag, OSIcon, SourceIcon } from './Icons';
 import { Modal } from './Modal';
 
@@ -38,6 +39,10 @@ export function VisitorModal({ visitorId, onClose }: { visitorId: string | null;
             <div className="min-w-0">
               <div className="truncate text-xl font-semibold">{displayName(visitorId!, p.visitor?.name, p.visitor?.email)}</div>
               {p.visitor?.email && p.visitor.name && <div className="text-sm text-stone-500">{p.visitor.email}</div>}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <CookieId id={visitorId!} />
+                {p.visitor?.user_id && <span className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-600">user_id {p.visitor.user_id}</span>}
+              </div>
               {last && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-stone-500">
                   <span className="flex items-center gap-1">

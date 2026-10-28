@@ -86,6 +86,12 @@ export async function verifyToken(secret: string, token: string | undefined): Pr
   return safeEqual(expected, token) ? value : null;
 }
 
+/** Hex SHA-256, for storing API tokens without keeping the token itself. */
+export async function sha256Hex(value: string): Promise<string> {
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(value)));
+  return Array.from(h, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function passwordsMatch(a: string, b: string): boolean {
   return safeEqual(a, b);
 }

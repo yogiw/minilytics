@@ -2,11 +2,12 @@ import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
 import { handleEvent } from './collect';
 import { forgetSite, type AppEnv, type Site } from './env';
-import { clearSession, currentUser, googleCallback, googleStart, isHosted, requireUser, setSession, siteAccessSql } from './auth';
+import { clearSession, currentUser, googleCallback, googleStart, isHosted, requireUser, setSession, siteAccessSql, subjectOf } from './auth';
 import { billingWebhook, checkout, planInfo } from './billing';
-import { passwordsMatch, randomId } from './lib/crypto';
+import { passwordsMatch, randomId, sha256Hex } from './lib/crypto';
+import { handleMcp, newMcpToken } from './mcp';
 import { handleDodoWebhook, handleGoalApi, handlePaymentApi, handleStripeWebhook, learnDodoProducts, rematchPayments } from './payments';
-import { breakdown, customers, funnel, makeCtx, overview, realtime, visitorProfile, visitors, type FunnelStep } from './stats';
+import { breakdown, cleanFunnelSteps, customers, funnel, makeCtx, overview, realtime, visitorProfile, visitors, type FunnelStep } from './stats';
 
 const app = new Hono<AppEnv>();
 const MAX_FAILURES = 10;
@@ -20,6 +21,8 @@ app.post('/api/webhooks/dodo/:siteId', handleDodoWebhook);
 app.post('/api/webhooks/stripe/:siteId', handleStripeWebhook);
 app.post('/api/v1/payments', handlePaymentApi);
 app.post('/api/v1/goals', handleGoalApi);
+// MCP server for AI assistants (bearer token auth, see src/worker/mcp.ts).
+app.all('/api/mcp', handleMcp);
 
 // ---------- login
 
@@ -69,6 +72,34 @@ app.get('/api/auth/me', async (c) => {
 app.get('/api/public/plan', async (c) => c.json(await planInfo(c.env)));
 app.post('/api/billing/webhook', billingWebhook);
 app.get('/api/billing/checkout', requireUser, checkout);
+
+// ---------- MCP tokens (login required). A token sees every site its creator can.
+
+app.use('/api/mcp-tokens', requireUser);
+app.use('/api/mcp-tokens/*', requireUser);
+
+app.get('/api/mcp-tokens', async (c) => {
+  const res = await c.env.DB.prepare('SELECT id, name, prefix, created_at, last_used_at FROM mcp_tokens WHERE subject = ? ORDER BY created_at DESC')
+    .bind(subjectOf(c.get('user')))
+    .all();
+  return c.json(res.results);
+});
+
+app.post('/api/mcp-tokens', async (c) => {
+  const b = await c.req.json<{ name?: string }>().catch(() => ({}) as { name?: string });
+  const token = newMcpToken();
+  const row = { id: randomId(8), name: (b.name?.trim() || 'AI assistant').slice(0, 60), prefix: token.slice(0, 12), created_at: Date.now(), last_used_at: null };
+  await c.env.DB.prepare('INSERT INTO mcp_tokens (id, subject, name, token_hash, prefix, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(row.id, subjectOf(c.get('user')), row.name, await sha256Hex(token), row.prefix, row.created_at)
+    .run();
+  // The only time the token is shown.
+  return c.json({ ...row, token });
+});
+
+app.delete('/api/mcp-tokens/:tid', async (c) => {
+  await c.env.DB.prepare('DELETE FROM mcp_tokens WHERE id = ? AND subject = ?').bind(c.req.param('tid'), subjectOf(c.get('user'))).run();
+  return c.json({ ok: true });
+});
 
 // ---------- dashboard API (login required)
 
@@ -259,10 +290,7 @@ app.get('/api/sites/:id/funnels', async (c) => {
 
 app.post('/api/sites/:id/funnels', async (c) => {
   const b = await c.req.json<{ name?: string; steps?: FunnelStep[] }>().catch(() => ({}) as { name?: string; steps?: FunnelStep[] });
-  const steps = (b.steps ?? [])
-    .filter((s) => (s.type === 'page' || s.type === 'goal') && typeof s.value === 'string' && s.value.trim())
-    .slice(0, 10)
-    .map((s) => ({ type: s.type, value: s.value.trim().slice(0, 200) }));
+  const steps = cleanFunnelSteps(b.steps);
   if (!b.name?.trim() || steps.length < 2) return c.json({ error: 'A funnel needs a name and at least 2 steps' }, 400);
   const id = randomId(8);
   await c.env.DB.prepare('INSERT INTO funnels (id, site_id, name, steps, created_at) VALUES (?, ?, ?, ?, ?)')

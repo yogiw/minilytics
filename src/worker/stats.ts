@@ -76,10 +76,13 @@ interface Ctx {
 }
 
 export function makeCtx(c: Context<AppEnv>): Ctx {
-  const site = c.get('site');
-  const q = c.req.query();
+  return ctxFor(c.env.DB, c.get('site'), c.req.query());
+}
+
+/** Same as makeCtx, from plain query values (period, from, to, granularity, filters as JSON). */
+export function ctxFor(db: D1Database, site: Site, q: Record<string, string | undefined>): Ctx {
   const range = resolveRange(q, site.timezone, site.created_at);
-  return { db: c.env.DB, site, range, filters: parseFilters(q.filters), offset: tzOffset(site.timezone, range.to) };
+  return { db, site, range, filters: parseFilters(q.filters), offset: tzOffset(site.timezone, range.to) };
 }
 
 function sessionsWhere(ctx: Ctx, from = ctx.range.from, to = ctx.range.to) {
@@ -200,7 +203,7 @@ export async function overview(ctx: Ctx) {
 }
 
 /** Session dimensions, keyed by the name the dashboard asks for. */
-const SESSION_DIMS: Record<string, string> = {
+export const SESSION_DIMS: Record<string, string> = {
   channel: 's.channel',
   source: 's.source',
   campaign: 's.utm_campaign',
@@ -400,6 +403,14 @@ export interface FunnelStep {
   type: 'page' | 'goal';
   value: string; // page paths support * wildcards, e.g. /blog/*
   label?: string;
+}
+
+/** Keep valid steps only (page or goal, max 10). */
+export function cleanFunnelSteps(raw: unknown): FunnelStep[] {
+  return (Array.isArray(raw) ? (raw as FunnelStep[]) : [])
+    .filter((s) => s && (s.type === 'page' || s.type === 'goal') && typeof s.value === 'string' && s.value.trim())
+    .slice(0, 10)
+    .map((s) => ({ type: s.type, value: s.value.trim().slice(0, 200) }));
 }
 
 /** Visitors who completed each step, in order, within the period. */
