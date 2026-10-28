@@ -18,6 +18,15 @@ describe('classify', () => {
   it('recognises AI assistants, including utm_source=chatgpt.com', () => {
     expect(classify({ referrerDomain: null, utmSource: 'chatgpt.com' })).toMatchObject({ source: 'ChatGPT', channel: 'AI' });
   });
+  it('names every link builder platform from its utm_source', () => {
+    const cases: [string, string][] = [
+      ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['threads', 'Threads'], ['pinterest', 'Pinterest'],
+      ['bluesky', 'Bluesky'], ['mastodon', 'Mastodon'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'], ['discord', 'Discord'],
+      ['hackernews', 'Hacker News'], ['indiehackers', 'Indie Hackers'], ['substack', 'Substack'], ['devto', 'Dev.to'],
+    ];
+    for (const [utmSource, source] of cases) expect(classify({ referrerDomain: null, utmSource })).toMatchObject({ source });
+    expect(classify({ referrerDomain: 't.me' })).toMatchObject({ source: 'Telegram', channel: 'Organic Social' });
+  });
   it('lets ref/utm tags win over the referrer', () => {
     expect(classify({ referrerDomain: 'google.com', ref: 'producthunt' })).toMatchObject({ source: 'Product Hunt' });
     expect(classify({ referrerDomain: null, ref: 'my-newsletter-42' })).toMatchObject({ source: 'my-newsletter-42', channel: 'Referral' });

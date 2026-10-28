@@ -585,27 +585,76 @@ function McpAccess({ origin }: { origin: string }) {
   );
 }
 
-const PRESETS = [
-  { label: 'X / Twitter', source: 'x', medium: 'social' },
-  { label: 'LinkedIn', source: 'linkedin', medium: 'social' },
-  { label: 'Reddit', source: 'reddit', medium: 'social' },
-  { label: 'YouTube', source: 'youtube', medium: 'video' },
-  { label: 'Medium', source: 'medium', medium: 'article' },
-  { label: 'Newsletter', source: 'newsletter', medium: 'email' },
-  { label: 'Product Hunt', source: 'producthunt', medium: 'referral' },
+interface Preset {
+  label: string;
+  source: string;
+  medium: string;
+}
+
+// Sources match KNOWN_SOURCES (src/shared/sources.ts), so tagged visits get the right name and icon.
+const PRESET_GROUPS: { group: string; items: Preset[] }[] = [
+  {
+    group: 'Social',
+    items: [
+      { label: 'X / Twitter', source: 'x', medium: 'social' },
+      { label: 'Instagram', source: 'instagram', medium: 'social' },
+      { label: 'Facebook', source: 'facebook', medium: 'social' },
+      { label: 'TikTok', source: 'tiktok', medium: 'social' },
+      { label: 'Threads', source: 'threads', medium: 'social' },
+      { label: 'LinkedIn', source: 'linkedin', medium: 'social' },
+      { label: 'Reddit', source: 'reddit', medium: 'social' },
+      { label: 'Pinterest', source: 'pinterest', medium: 'social' },
+      { label: 'Bluesky', source: 'bluesky', medium: 'social' },
+      { label: 'Mastodon', source: 'mastodon', medium: 'social' },
+      { label: 'YouTube', source: 'youtube', medium: 'video' },
+    ],
+  },
+  {
+    group: 'Chat',
+    items: [
+      { label: 'WhatsApp', source: 'whatsapp', medium: 'social' },
+      { label: 'Telegram', source: 'telegram', medium: 'social' },
+      { label: 'Discord', source: 'discord', medium: 'social' },
+    ],
+  },
+  {
+    group: 'Communities & writing',
+    items: [
+      { label: 'Hacker News', source: 'hackernews', medium: 'social' },
+      { label: 'Product Hunt', source: 'producthunt', medium: 'referral' },
+      { label: 'Indie Hackers', source: 'indiehackers', medium: 'referral' },
+      { label: 'Medium', source: 'medium', medium: 'article' },
+      { label: 'Substack', source: 'substack', medium: 'article' },
+      { label: 'Dev.to', source: 'devto', medium: 'article' },
+    ],
+  },
+  {
+    group: 'Other',
+    items: [
+      { label: 'Newsletter', source: 'newsletter', medium: 'email' },
+      { label: 'QR code / print', source: 'qr', medium: 'offline' },
+    ],
+  },
 ];
+const PRESETS = PRESET_GROUPS.flatMap((g) => g.items);
+const CUSTOM = 'custom';
+
+const slug = (v: string) => v.trim().toLowerCase().replace(/\s+/g, '-');
 
 /** Build a tagged link per tweet / article, so each one shows up separately in Campaign. */
 function LinkBuilder({ domain }: { domain: string }) {
   const [url, setUrl] = useState(`https://${domain}/`);
-  const [preset, setPreset] = useState(PRESETS[0]);
+  const [source, setSource] = useState(PRESETS[0].source);
+  const [medium, setMedium] = useState(PRESETS[0].medium);
   const [campaign, setCampaign] = useState('');
+  // Editing source or medium by hand turns the dropdown into "Custom".
+  const preset = PRESETS.find((p) => p.source === slug(source) && p.medium === slug(medium));
   let built = '';
   try {
     const u = new URL(url);
-    u.searchParams.set('utm_source', preset.source);
-    u.searchParams.set('utm_medium', preset.medium);
-    if (campaign) u.searchParams.set('utm_campaign', campaign.trim().toLowerCase().replace(/\s+/g, '-'));
+    if (slug(source)) u.searchParams.set('utm_source', slug(source));
+    if (slug(medium)) u.searchParams.set('utm_medium', slug(medium));
+    if (campaign) u.searchParams.set('utm_campaign', slug(campaign));
     built = u.toString();
   } catch {}
   return (
@@ -617,15 +666,36 @@ function LinkBuilder({ domain }: { domain: string }) {
         </div>
         <div>
           <label className="label">Where you post it</label>
-          <select className="input" value={preset.label} onChange={(e) => setPreset(PRESETS.find((p) => p.label === e.target.value)!)}>
-            {PRESETS.map((p) => (
-              <option key={p.label}>{p.label}</option>
+          <select
+            className="input"
+            value={preset?.label ?? CUSTOM}
+            onChange={(e) => {
+              const p = PRESETS.find((x) => x.label === e.target.value);
+              setSource(p?.source ?? '');
+              setMedium(p?.medium ?? 'social');
+            }}
+          >
+            {PRESET_GROUPS.map((g) => (
+              <optgroup key={g.group} label={g.group}>
+                {g.items.map((p) => (
+                  <option key={p.label}>{p.label}</option>
+                ))}
+              </optgroup>
             ))}
+            <option value={CUSTOM}>Custom…</option>
           </select>
         </div>
         <div className="sm:col-span-2">
           <label className="label">Post name</label>
           <input className="input" placeholder="launch-tweet" value={campaign} onChange={(e) => setCampaign(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Source</label>
+          <input className="input font-mono" placeholder="e.g. instagram" value={source} onChange={(e) => setSource(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Medium</label>
+          <input className="input font-mono" placeholder="e.g. social" value={medium} onChange={(e) => setMedium(e.target.value)} />
         </div>
       </div>
       {built && (
