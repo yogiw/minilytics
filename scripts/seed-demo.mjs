@@ -41,6 +41,8 @@ const out = [];
 out.push(`DELETE FROM events WHERE site_id = '${siteId}';`, `DELETE FROM sessions WHERE site_id = '${siteId}';`, `DELETE FROM visitors WHERE site_id = '${siteId}';`, `DELETE FROM payments WHERE site_id = '${siteId}';`, `DELETE FROM funnels WHERE site_id = '${siteId}';`, `DELETE FROM sites WHERE id = '${siteId}';`);
 out.push(`INSERT INTO sites (id, name, domain, timezone, currency, api_key, created_at) VALUES ('${siteId}', 'ShipKit', 'shipkit.dev', 'UTC', 'USD', 'ml_demo_key', ${now - 60 * DAY});`);
 out.push(`INSERT INTO funnels (id, site_id, name, steps, created_at) VALUES ('fun00001', '${siteId}', 'Landing → Checkout', ${q(JSON.stringify([{ type: 'page', value: '/' }, { type: 'page', value: '/pricing' }, { type: 'goal', value: 'checkout_click' }]))}, ${now});`);
+out.push(`INSERT INTO funnels (id, site_id, name, steps, created_at) VALUES ('fun00002', '${siteId}', 'Blog → Signup', ${q(JSON.stringify([{ type: 'page', value: '/blog/*' }, { type: 'goal', value: 'signup_click' }]))}, ${now + 1});`);
+out.push(`INSERT INTO funnels (id, site_id, name, steps, created_at) VALUES ('fun00003', '${siteId}', 'Features → Pricing', ${q(JSON.stringify([{ type: 'page', value: '/features' }, { type: 'page', value: '/pricing' }, { type: 'goal', value: 'checkout_click' }]))}, ${now + 2});`);
 
 let payN = 0;
 for (let d = 34; d >= 0; d--) {
