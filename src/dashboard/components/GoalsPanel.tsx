@@ -78,79 +78,95 @@ interface FunnelDef {
 }
 
 function Funnels() {
-  const { site, q, reloadKey } = useDash();
+  const { site } = useDash();
   const [version, setVersion] = useState(0);
   const { data: funnels } = useApi<FunnelDef[]>(`/api/sites/${site.id}/funnels`, version);
-  const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const current = funnels?.find((f) => f.id === selected) ?? funnels?.[0];
-  const { data: stats } = useApi<(FunnelDef['steps'][0] & { visitors: number })[]>(
-    current ? `/api/sites/${site.id}/funnels/${current.id}/stats?${qs(q)}` : null,
-    reloadKey + version,
-  );
 
   if (!funnels) return <div className="h-40 animate-pulse" />;
   if (creating || !funnels.length)
     return (
       <FunnelForm
-        onDone={(id) => {
+        onDone={() => {
           setCreating(false);
-          if (id) setSelected(id);
           setVersion((v) => v + 1);
         }}
         canCancel={funnels.length > 0}
       />
     );
 
-  const top = stats?.[0]?.visitors || 0;
   return (
     <div className="px-3 pb-3">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <select className="input w-auto py-1.5" value={current?.id} onChange={(e) => setSelected(e.target.value)}>
-          {funnels.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
+      <div className="mb-2 flex justify-end">
         <button className="btn py-1.5" onClick={() => setCreating(true)}>
           + New funnel
         </button>
-        {current && (
-          <button
-            className="btn py-1.5 text-red-600"
-            onClick={async () => {
-              if (!confirm(`Delete funnel "${current.name}"?`)) return;
-              await api(`/api/sites/${site.id}/funnels/${current.id}`, { method: 'DELETE' });
-              setSelected(null);
-              setVersion((v) => v + 1);
-            }}
-          >
-            Delete
-          </button>
-        )}
       </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(1, stats?.length ?? 1)}, minmax(0, 1fr))` }}>
-        {stats?.map((s, i) => {
-          const pct = top ? s.visitors / top : 0;
-          const prev = i ? stats[i - 1].visitors : s.visitors;
-          return (
-            <div key={i} className="min-w-0">
-              <div className="flex h-48 items-end rounded-xl bg-stone-50">
-                <div className="w-full rounded-xl bg-visitors/70 transition-all" style={{ height: `${Math.max(pct * 100, 2)}%` }} />
-              </div>
-              <div className="mt-2 truncate text-sm font-medium" title={s.value}>
-                {i + 1}. {s.type === 'goal' ? '🎯 ' : ''}
-                {s.value}
-              </div>
-              <div className="text-sm text-stone-600">
-                {fmtNumber(s.visitors)} visitors · {fmtPct(pct)}
-              </div>
-              {i > 0 && <div className="text-xs text-red-500">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'} drop-off</div>}
+      <div className="divide-y divide-stone-100">
+        {funnels.map((f) => (
+          <FunnelView key={f.id} funnel={f} onChange={() => setVersion((v) => v + 1)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type FunnelStat = FunnelDef['steps'][number] & { visitors: number };
+
+function FunnelView({ funnel, onChange }: { funnel: FunnelDef; onChange: () => void }) {
+  const { site, q, reloadKey } = useDash();
+  const { data: stats, error } = useApi<FunnelStat[]>(`/api/sites/${site.id}/funnels/${funnel.id}/stats?${qs(q)}`, reloadKey);
+  const steps = funnel.steps.map((s) => (s.type === 'goal' ? `🎯 ${s.value}` : s.value)).join(' → ');
+
+  return (
+    <section className="py-5 first:pt-1">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-medium">{funnel.name}</h3>
+          <p className="mt-0.5 truncate text-xs text-stone-500" title={steps}>
+            {steps}
+          </p>
+        </div>
+        <button
+          className="btn shrink-0 py-1.5 text-red-600"
+          onClick={async () => {
+            if (!confirm(`Delete funnel "${funnel.name}"?`)) return;
+            await api(`/api/sites/${site.id}/funnels/${funnel.id}`, { method: 'DELETE' });
+            onChange();
+          }}
+        >
+          Delete
+        </button>
+      </div>
+      {error ? <p className="text-sm text-red-600">{error}</p> : <FunnelBars stats={stats} />}
+    </section>
+  );
+}
+
+function FunnelBars({ stats }: { stats: FunnelStat[] | null }) {
+  if (!stats) return <div className="h-32 animate-pulse rounded-xl bg-stone-50" />;
+  const top = stats[0]?.visitors || 0;
+  return (
+    <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(1, stats.length)}, minmax(0, 1fr))` }}>
+      {stats.map((s, i) => {
+        const pct = top ? s.visitors / top : 0;
+        const prev = i ? stats[i - 1].visitors : s.visitors;
+        return (
+          <div key={i} className="min-w-0">
+            <div className="flex h-32 items-end rounded-xl bg-stone-50">
+              <div className="w-full rounded-xl bg-visitors/70 transition-all" style={{ height: `${Math.max(pct * 100, 2)}%` }} />
             </div>
-          );
-        })}
-      </div>
+            <div className="mt-2 truncate text-sm font-medium" title={s.value}>
+              {i + 1}. {s.type === 'goal' ? '🎯 ' : ''}
+              {s.value}
+            </div>
+            <div className="text-sm text-stone-600">
+              {fmtNumber(s.visitors)} visitors · {fmtPct(pct)}
+            </div>
+            {i > 0 && <div className="text-xs text-red-500">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'} drop-off</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
